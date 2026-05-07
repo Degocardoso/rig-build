@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RIG // Gerenciador de Build</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg-deep: #0a0a0b;
+    --bg-card: #131316;
+    --bg-elev: #1a1a1f;
+    --border: #26262d;
+    --border-strong: #3a3a44;
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent: #d4ff3a;
+    --accent-dim: #8aab1f;
+    --accent-glow: rgba(212, 255, 58, 0.15);
+    --warn: #ff8a3a;
+    --info: #3aa8ff;
+    --danger: #ff5a5a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 60px 60px;
+    opacity: 0.25;
+    pointer-events: none;
+    z-index: 0;
+    mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: -200px;
+    right: -200px;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, var(--accent-glow), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(40px);
+  }
+
+  .display-font { font-family: 'Syne', sans-serif; letter-spacing: -0.02em; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    position: relative;
+  }
+
+  .panel-corner::before,
+  .panel-corner::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: var(--accent);
+  }
+  .panel-corner::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+  .panel-corner::after { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+
+  .label-tag {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .input-field, .select-field {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    padding: 12px 14px;
+    width: 100%;
+    transition: all 0.15s ease;
+    outline: none;
+  }
+
+  .input-field:focus, .select-field:focus {
+    border-color: var(--accent);
+    background: #1d1d23;
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .input-field::placeholder { color: var(--text-muted); }
+
+  .select-field {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    padding-right: 40px;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0a0a0b;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 14px 24px;
+    border: none;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 13px;
+    transition: all 0.15s ease;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #e4ff5a;
+    box-shadow: 0 0 24px var(--accent-glow);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-danger {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+  }
+  .btn-danger:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(255, 90, 90, 0.05);
+  }
+
+  .btn-edit {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .btn-edit:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    padding: 14px 24px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 13px;
+    transition: all 0.15s ease;
+  }
+  .btn-secondary:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    transition: color 0.15s ease;
+  }
+  .btn-ghost:hover { color: var(--text-primary); }
+
+  .stat-value { font-family: 'Syne', sans-serif; font-weight: 700; letter-spacing: -0.03em; }
+
+  .table-row { transition: background 0.15s ease; border-top: 1px solid var(--border); }
+  .table-row:hover { background: rgba(212, 255, 58, 0.03); }
+
+  .badge {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border: 1px solid;
+    display: inline-block;
+    font-weight: 600;
+  }
+  .badge-cash { color: var(--accent); border-color: var(--accent-dim); background: rgba(212, 255, 58, 0.05); }
+  .badge-installment { color: var(--info); border-color: #1e5a8a; background: rgba(58, 168, 255, 0.05); }
+
+  .month-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 18px;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+  .month-card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+  .month-card.current {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(212, 255, 58, 0.04) 100%);
+  }
+
+  .bar-fill {
+    height: 4px;
+    background: var(--bg-elev);
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .bar-fill > div {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+    transition: width 0.4s ease;
+  }
+
+  .empty-state {
+    border: 1px dashed var(--border-strong);
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg-deep); }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-in { animation: fadeUp 0.3s ease forwards; }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .live-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse-dot 2s infinite;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+
+  .error-msg {
+    color: var(--danger);
+    font-size: 12px;
+    margin-top: 6px;
+    letter-spacing: 0.05em;
+    display: none;
+  }
+  .error-msg.show { display: block; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    animation: fadeIn 0.2s ease;
+  }
+  .modal-backdrop.show { display: flex; }
+
+  .modal-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    max-width: 480px;
+    width: 100%;
+    padding: 28px;
+    position: relative;
+    animation: scaleIn 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  }
+  .modal-panel::before, .modal-panel::after {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    border-color: var(--accent);
+  }
+  .modal-panel::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+  .modal-panel::after { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    padding: 14px 20px;
+    z-index: 100;
+    font-size: 13px;
+    max-width: 360px;
+    animation: slideIn 0.3s ease;
+    border-left: 3px solid var(--accent);
+  }
+  .toast.error { border-left-color: var(--danger); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Auth screen */
+  .auth-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+    z-index: 10;
+  }
+
+  .tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-bottom: 2px solid var(--border);
+    transition: all 0.15s ease;
+  }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+</style>
+</head>
+<body class="min-h-screen relative">
+
+<!-- ============== AUTH SCREEN ============== -->
+<div id="authScreen" class="auth-screen" style="display:none">
+  <div class="panel panel-corner p-8 max-w-md w-full">
+    <div class="text-center mb-8">
+      <div class="flex items-center justify-center gap-2 mb-3">
+        <span class="live-dot"></span>
+        <span class="label-tag">SYS // STANDBY</span>
+      </div>
+      <h1 class="display-font text-5xl font-bold leading-none">
+        RIG<span style="color: var(--accent)">.</span>BUILD
+      </h1>
+      <p class="text-xs mt-3" style="color: var(--text-secondary)">
+        autentique-se para acessar seu inventário
+      </p>
+    </div>
+
+    <div class="flex mb-6">
+      <button class="tab-btn active" data-tab="login">Entrar</button>
+      <button class="tab-btn" data-tab="signup">Criar conta</button>
+    </div>
+
+    <form id="authForm" class="space-y-5" novalidate>
+      <div>
+        <label class="label-tag block mb-2" for="auth-email">// email</label>
+        <input type="email" id="auth-email" class="input-field" autocomplete="email" required />
+      </div>
+      <div>
+        <label class="label-tag block mb-2" for="auth-password">// senha</label>
+        <input type="password" id="auth-password" class="input-field" autocomplete="current-password" minlength="6" required />
+        <div class="text-xs mt-2" style="color: var(--text-muted)">mínimo 6 caracteres</div>
+      </div>
+      <div class="error-msg" id="auth-error"></div>
+      <button type="submit" class="btn-primary w-full" id="authSubmit">
+        <span id="authBtnText">Entrar</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ============== LOADING ============== -->
+<div id="loadingScreen" class="auth-screen">
+  <div class="text-center">
+    <div class="spinner mb-4" style="width: 32px; height: 32px;"></div>
+    <div class="label-tag">// inicializando</div>
+  </div>
+</div>
+
+<!-- ============== APP ============== -->
+<div id="app" class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12" style="display:none">
+
+  <header class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10 lg:mb-14">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <span class="live-dot"></span>
+        <span class="label-tag">SYS // ACTIVE</span>
+      </div>
+      <h1 class="display-font text-5xl sm:text-6xl lg:text-7xl font-bold leading-none">
+        RIG<span style="color: var(--accent)">.</span>BUILD
+      </h1>
+      <p class="text-sm mt-3" style="color: var(--text-secondary)">
+        Gerenciador de custos para montagem de PC // controle de fatura mês a mês
+      </p>
+    </div>
+    <div class="text-right">
+      <div class="label-tag mb-1">user</div>
+      <div class="mono text-xs mb-2" style="color: var(--text-secondary)" id="userEmail">—</div>
+      <button class="btn-ghost" id="logoutBtn">// sair</button>
+    </div>
+  </header>
+
+  <section class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+    <div class="panel panel-corner p-6">
+      <div class="label-tag mb-3">custo total do projeto</div>
+      <div class="stat-value text-4xl lg:text-5xl" style="color: var(--accent)">
+        R$ <span id="totalProjeto">0,00</span>
+      </div>
+      <div class="text-xs mt-2" style="color: var(--text-muted)">
+        <span id="totalPecas">0</span> peças catalogadas
+      </div>
+    </div>
+    <div class="panel p-6">
+      <div class="label-tag mb-3">pago à vista</div>
+      <div class="stat-value text-4xl lg:text-5xl">R$ <span id="totalAvista">0,00</span></div>
+      <div class="text-xs mt-2" style="color: var(--text-muted)">debitado do orçamento atual</div>
+    </div>
+    <div class="panel p-6">
+      <div class="label-tag mb-3">total parcelado</div>
+      <div class="stat-value text-4xl lg:text-5xl" style="color: var(--info)">R$ <span id="totalParcelado">0,00</span></div>
+      <div class="text-xs mt-2" style="color: var(--text-muted)">
+        em <span id="qtdParceladas">0</span> peças
+      </div>
+    </div>
+  </section>
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
+
+    <section class="lg:col-span-4 panel panel-corner p-6 lg:p-8 h-fit">
+      <div class="flex items-center gap-2 mb-6">
+        <div class="w-1 h-5" style="background: var(--accent)"></div>
+        <h2 class="display-font text-2xl font-bold">Adicionar Peça</h2>
+      </div>
+
+      <form id="form" class="space-y-5" novalidate>
+        <div>
+          <label class="label-tag block mb-2" for="nome">// nome da peça</label>
+          <input type="text" id="nome" class="input-field" placeholder="ex: Ryzen 7 7700X" autocomplete="off" />
+          <div class="error-msg" id="err-nome">Informe o nome da peça</div>
+        </div>
+        <div>
+          <label class="label-tag block mb-2" for="valor">// valor total (R$)</label>
+          <input type="number" id="valor" class="input-field" placeholder="0,00" step="0.01" min="0" />
+          <div class="error-msg" id="err-valor">Valor deve ser maior que zero</div>
+        </div>
+        <div>
+          <label class="label-tag block mb-2" for="dataCompra">// data da compra</label>
+          <input type="date" id="dataCompra" class="input-field" />
+          <div class="error-msg" id="err-data">Informe a data</div>
+        </div>
+        <div>
+          <label class="label-tag block mb-2" for="forma">// forma de pagamento</label>
+          <select id="forma" class="select-field">
+            <option value="avista">À vista</option>
+            <option value="parcelado">Parcelado</option>
+          </select>
+        </div>
+        <div id="parcelasWrapper" style="display:none">
+          <label class="label-tag block mb-2" for="parcelas">// número de parcelas</label>
+          <select id="parcelas" class="select-field"></select>
+          <div class="text-xs mt-2 mono" style="color: var(--text-muted)">
+            valor por parcela: <span style="color: var(--accent)" id="previewParcela">R$ 0,00</span>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary w-full" id="addBtn">
+          <span id="addBtnText">+ Adicionar Peça</span>
+        </button>
+      </form>
+    </section>
+
+    <section class="lg:col-span-8 panel p-6 lg:p-8">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-2">
+          <div class="w-1 h-5" style="background: var(--accent)"></div>
+          <h2 class="display-font text-2xl font-bold">Inventário</h2>
+        </div>
+        <span class="label-tag" id="counterLabel">0 itens</span>
+      </div>
+
+      <div id="emptyState" class="empty-state">
+        <div class="display-font text-2xl mb-2">// vazio</div>
+        <div class="text-xs">Adicione sua primeira peça ao build</div>
+      </div>
+
+      <div id="tableWrapper" class="overflow-x-auto" style="display:none">
+        <table class="w-full text-sm">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--border-strong)">
+              <th class="label-tag text-left py-3 pr-4">peça</th>
+              <th class="label-tag text-left py-3 px-3 hidden lg:table-cell">data</th>
+              <th class="label-tag text-right py-3 px-3">valor</th>
+              <th class="label-tag text-center py-3 px-3 hidden sm:table-cell">pgto</th>
+              <th class="label-tag text-right py-3 px-3 hidden md:table-cell">parcela</th>
+              <th class="label-tag text-right py-3 pl-3"></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel panel-corner p-6 lg:p-8 mb-10">
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+      <div>
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-1 h-5" style="background: var(--accent)"></div>
+          <h2 class="display-font text-3xl lg:text-4xl font-bold">Projeção de Faturas</h2>
+        </div>
+        <p class="text-sm" style="color: var(--text-secondary)">
+          Distribuição mês a mês considerando a data de compra de cada peça
+        </p>
+      </div>
+      <div class="text-right">
+        <div class="label-tag mb-1">pico de fatura <span id="peakMonthLabel" style="color: var(--warn)"></span></div>
+        <div class="stat-value text-2xl" style="color: var(--warn)">R$ <span id="peakMonth">0,00</span></div>
+      </div>
+    </div>
+
+    <div id="monthsEmpty" class="empty-state">
+      <div class="display-font text-2xl mb-2">// sem lançamentos</div>
+      <div class="text-xs">Adicione peças para ver a projeção</div>
+    </div>
+
+    <div id="monthsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" style="display:none"></div>
+  </section>
+
+  <footer class="text-center pt-8" style="border-top: 1px solid var(--border)">
+    <div class="label-tag">// end_of_transmission</div>
+    <div class="text-xs mt-2 mono" style="color: var(--text-muted)">
+      RIG.BUILD v2.0 — sincronizado na nuvem via Supabase
+    </div>
+  </footer>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-backdrop" id="editModal" role="dialog" aria-modal="true">
+  <div class="modal-panel">
+    <div class="flex items-center gap-2 mb-6">
+      <div class="w-1 h-5" style="background: var(--accent)"></div>
+      <h2 class="display-font text-2xl font-bold">Editar Peça</h2>
+    </div>
+
+    <form id="editForm" class="space-y-5" novalidate>
+      <input type="hidden" id="edit-id" />
+      <div>
+        <label class="label-tag block mb-2" for="edit-nome">// nome da peça</label>
+        <input type="text" id="edit-nome" class="input-field" autocomplete="off" />
+        <div class="error-msg" id="edit-err-nome">Informe o nome da peça</div>
+      </div>
+      <div>
+        <label class="label-tag block mb-2" for="edit-valor">// valor total (R$)</label>
+        <input type="number" id="edit-valor" class="input-field" step="0.01" min="0" />
+        <div class="error-msg" id="edit-err-valor">Valor deve ser maior que zero</div>
+      </div>
+      <div>
+        <label class="label-tag block mb-2" for="edit-dataCompra">// data da compra</label>
+        <input type="date" id="edit-dataCompra" class="input-field" />
+        <div class="error-msg" id="edit-err-data">Informe a data</div>
+      </div>
+      <div>
+        <label class="label-tag block mb-2" for="edit-forma">// forma de pagamento</label>
+        <select id="edit-forma" class="select-field">
+          <option value="avista">À vista</option>
+          <option value="parcelado">Parcelado</option>
+        </select>
+      </div>
+      <div id="edit-parcelasWrapper" style="display:none">
+        <label class="label-tag block mb-2" for="edit-parcelas">// número de parcelas</label>
+        <select id="edit-parcelas" class="select-field"></select>
+        <div class="text-xs mt-2 mono" style="color: var(--text-muted)">
+          valor por parcela: <span style="color: var(--accent)" id="edit-previewParcela">R$ 0,00</span>
+        </div>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" class="btn-secondary flex-1" id="editCancel">Cancelar</button>
+        <button type="submit" class="btn-primary flex-1" id="editSaveBtn">
+          <span id="editSaveText">Salvar</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // ============== INIT ==============
+  if (!window.RIG_CONFIG || window.RIG_CONFIG.SUPABASE_URL.includes('COLE_SUA')) {
+    document.body.innerHTML = '<div style="padding:40px;font-family:monospace;color:#ff5a5a;text-align:center;"><h1>⚠️ Configuração faltando</h1><p>Edite o arquivo <strong>config.js</strong> e adicione suas credenciais do Supabase.</p><p style="color:#a1a1aa;font-size:12px;margin-top:20px;">Veja o README.md</p></div>';
+    throw new Error('Config missing');
+  }
+
+  const sb = window.supabase.createClient(
+    window.RIG_CONFIG.SUPABASE_URL,
+    window.RIG_CONFIG.SUPABASE_ANON_KEY
+  );
+
+  const state = {
+    user: null,
+    pecas: [],
+    authMode: 'login', // 'login' | 'signup'
+  };
+
+  const fmt = (n) => Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const $ = (id) => document.getElementById(id);
+
+  // ============== DATE HELPERS ==============
+  const MESES_CURTOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+  // hoje em formato YYYY-MM-DD respeitando timezone local
+  function hojeISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  // converte 'YYYY-MM-DD' em Date local (sem cair na armadilha do UTC)
+  function parseDateLocal(iso) {
+    if (!iso) return null;
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // formata uma data ISO como '05/05/2026'
+  function fmtDataBR(iso) {
+    const d = parseDateLocal(iso);
+    if (!d) return '—';
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  }
+
+  // chave de mês 'YYYY-MM' a partir de ano/mês
+  function monthKey(year, month) {
+    return `${year}-${String(month + 1).padStart(2, '0')}`;
+  }
+
+  // label amigável tipo 'Mai/26'
+  function monthLabel(year, month) {
+    return `${MESES_CURTOS[month]}/${String(year).slice(-2)}`;
+  }
+
+  // dado um ISO base, retorna {year, month} somando N meses
+  function addMonths(iso, n) {
+    const d = parseDateLocal(iso);
+    const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
+    return { year: target.getFullYear(), month: target.getMonth() };
+  }
+
+  function toast(msg, isError = false) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  // ============== POPULATE PARCELAS ==============
+  ['parcelas', 'edit-parcelas'].forEach(selId => {
+    const sel = $(selId);
+    for (let i = 2; i <= 12; i++) {
+      const o = document.createElement('option');
+      o.value = i;
+      o.textContent = i + 'x';
+      sel.appendChild(o);
+    }
+  });
+
+  // ============== AUTH ==============
+  const authScreen = $('authScreen');
+  const loadingScreen = $('loadingScreen');
+  const appScreen = $('app');
+
+  function showScreen(name) {
+    authScreen.style.display = name === 'auth' ? 'flex' : 'none';
+    loadingScreen.style.display = name === 'loading' ? 'flex' : 'none';
+    appScreen.style.display = name === 'app' ? 'block' : 'none';
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.authMode = btn.dataset.tab;
+      $('authBtnText').textContent = state.authMode === 'login' ? 'Entrar' : 'Criar conta';
+      $('auth-error').classList.remove('show');
+    });
+  });
+
+  $('authForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('auth-email').value.trim();
+    const password = $('auth-password').value;
+    const errEl = $('auth-error');
+    errEl.classList.remove('show');
+
+    if (!email || password.length < 6) {
+      errEl.textContent = 'Email válido e senha de 6+ caracteres são obrigatórios';
+      errEl.classList.add('show');
+      return;
+    }
+
+    const btn = $('authSubmit');
+    const btnText = $('authBtnText');
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const fn = state.authMode === 'login'
+        ? sb.auth.signInWithPassword({ email, password })
+        : sb.auth.signUp({ email, password });
+      const { data, error } = await fn;
+      if (error) throw error;
+
+      if (state.authMode === 'signup' && !data.session) {
+        errEl.textContent = 'Conta criada! Verifique seu email para confirmar (ou desligue confirmação no Supabase).';
+        errEl.style.color = 'var(--accent)';
+        errEl.classList.add('show');
+      }
+    } catch (err) {
+      errEl.style.color = 'var(--danger)';
+      errEl.textContent = traduzErroAuth(err.message);
+      errEl.classList.add('show');
+    } finally {
+      btn.disabled = false;
+      btnText.textContent = state.authMode === 'login' ? 'Entrar' : 'Criar conta';
+    }
+  });
+
+  function traduzErroAuth(msg) {
+    const m = msg.toLowerCase();
+    if (m.includes('invalid login')) return 'Email ou senha incorretos';
+    if (m.includes('already registered')) return 'Este email já está cadastrado';
+    if (m.includes('password')) return 'Senha muito curta (mínimo 6 caracteres)';
+    if (m.includes('email')) return 'Email inválido';
+    return msg;
+  }
+
+  $('logoutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  // Listen to auth changes
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      state.user = session.user;
+      $('userEmail').textContent = session.user.email;
+      showScreen('app');
+      await loadPecas();
+    } else {
+      state.user = null;
+      state.pecas = [];
+      showScreen('auth');
+    }
+  });
+
+  // Initial session check
+  (async () => {
+    const { data } = await sb.auth.getSession();
+    if (data.session?.user) {
+      state.user = data.session.user;
+      $('userEmail').textContent = data.session.user.email;
+      showScreen('app');
+      await loadPecas();
+    } else {
+      showScreen('auth');
+    }
+  })();
+
+  // ============== DATA OPS ==============
+  async function loadPecas() {
+    try {
+      const { data, error } = await sb
+        .from('pecas')
+        .select('*')
+        .order('data_compra', { ascending: true })
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      state.pecas = data || [];
+      render();
+    } catch (err) {
+      toast('Erro ao carregar peças: ' + err.message, true);
+    }
+  }
+
+  async function addPeca(peca) {
+    const { data, error } = await sb
+      .from('pecas')
+      .insert([{ ...peca, user_id: state.user.id }])
+      .select()
+      .single();
+    if (error) throw error;
+    state.pecas.push(data);
+    render();
+  }
+
+  async function updatePeca(id, updates) {
+    const { data, error } = await sb
+      .from('pecas')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    const idx = state.pecas.findIndex(p => p.id === id);
+    if (idx !== -1) state.pecas[idx] = data;
+    render();
+  }
+
+  async function deletePeca(id) {
+    const { error } = await sb.from('pecas').delete().eq('id', id);
+    if (error) throw error;
+    state.pecas = state.pecas.filter(p => p.id !== id);
+    render();
+  }
+
+  // ============== ADD FORM ==============
+  const formaSelect = $('forma');
+  const parcelasSelect = $('parcelas');
+  const parcelasWrapper = $('parcelasWrapper');
+  const valorInput = $('valor');
+  const previewParcela = $('previewParcela');
+
+  function updateParcelasVisibility() {
+    parcelasWrapper.style.display = formaSelect.value === 'parcelado' ? 'block' : 'none';
+    updatePreview();
+  }
+  function updatePreview() {
+    const v = parseFloat(valorInput.value) || 0;
+    const p = parseInt(parcelasSelect.value) || 2;
+    previewParcela.textContent = (formaSelect.value === 'parcelado' && v > 0)
+      ? 'R$ ' + fmt(v / p) : 'R$ 0,00';
+  }
+  formaSelect.addEventListener('change', updateParcelasVisibility);
+  parcelasSelect.addEventListener('change', updatePreview);
+  valorInput.addEventListener('input', updatePreview);
+  updateParcelasVisibility();
+
+  // default da data = hoje
+  $('dataCompra').value = hojeISO();
+
+  $('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nome = $('nome').value.trim();
+    const valor = parseFloat(valorInput.value);
+    const forma = formaSelect.value;
+    const parcelas = forma === 'parcelado' ? parseInt(parcelasSelect.value) : 1;
+    const dataCompra = $('dataCompra').value;
+
+    let ok = true;
+    $('err-nome').classList.toggle('show', !nome);
+    if (!nome) ok = false;
+    const valorInvalido = isNaN(valor) || valor <= 0;
+    $('err-valor').classList.toggle('show', valorInvalido);
+    if (valorInvalido) ok = false;
+    $('err-data').classList.toggle('show', !dataCompra);
+    if (!dataCompra) ok = false;
+    if (!ok) return;
+
+    const btn = $('addBtn');
+    const txt = $('addBtnText');
+    btn.disabled = true;
+    txt.innerHTML = '<span class="spinner"></span>';
+    try {
+      await addPeca({ nome, valor, forma, parcelas, data_compra: dataCompra });
+      $('form').reset();
+      $('dataCompra').value = hojeISO();
+      updateParcelasVisibility();
+      toast('Peça adicionada');
+    } catch (err) {
+      toast('Erro: ' + err.message, true);
+    } finally {
+      btn.disabled = false;
+      txt.textContent = '+ Adicionar Peça';
+    }
+  });
+
+  // ============== EDIT MODAL ==============
+  const editModal = $('editModal');
+  const editFormaSelect = $('edit-forma');
+  const editParcelasSelect = $('edit-parcelas');
+  const editParcelasWrapper = $('edit-parcelasWrapper');
+  const editValorInput = $('edit-valor');
+  const editPreview = $('edit-previewParcela');
+
+  function updateEditParcelasVisibility() {
+    editParcelasWrapper.style.display = editFormaSelect.value === 'parcelado' ? 'block' : 'none';
+    updateEditPreview();
+  }
+  function updateEditPreview() {
+    const v = parseFloat(editValorInput.value) || 0;
+    const p = parseInt(editParcelasSelect.value) || 2;
+    editPreview.textContent = (editFormaSelect.value === 'parcelado' && v > 0)
+      ? 'R$ ' + fmt(v / p) : 'R$ 0,00';
+  }
+  editFormaSelect.addEventListener('change', updateEditParcelasVisibility);
+  editParcelasSelect.addEventListener('change', updateEditPreview);
+  editValorInput.addEventListener('input', updateEditPreview);
+
+  function openEditModal(id) {
+    const peca = state.pecas.find(p => p.id === id);
+    if (!peca) return;
+    $('edit-id').value = id;
+    $('edit-nome').value = peca.nome;
+    editValorInput.value = peca.valor;
+    editFormaSelect.value = peca.forma;
+    editParcelasSelect.value = peca.forma === 'parcelado' ? peca.parcelas : 2;
+    $('edit-dataCompra').value = peca.data_compra || hojeISO();
+    $('edit-err-nome').classList.remove('show');
+    $('edit-err-valor').classList.remove('show');
+    $('edit-err-data').classList.remove('show');
+    updateEditParcelasVisibility();
+    editModal.classList.add('show');
+    setTimeout(() => $('edit-nome').focus(), 50);
+  }
+  function closeEditModal() { editModal.classList.remove('show'); }
+
+  $('editCancel').addEventListener('click', closeEditModal);
+  editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && editModal.classList.contains('show')) closeEditModal();
+  });
+
+  $('editForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = $('edit-id').value;
+    const nome = $('edit-nome').value.trim();
+    const valor = parseFloat(editValorInput.value);
+    const forma = editFormaSelect.value;
+    const parcelas = forma === 'parcelado' ? parseInt(editParcelasSelect.value) : 1;
+    const dataCompra = $('edit-dataCompra').value;
+
+    let ok = true;
+    $('edit-err-nome').classList.toggle('show', !nome);
+    if (!nome) ok = false;
+    const valorInvalido = isNaN(valor) || valor <= 0;
+    $('edit-err-valor').classList.toggle('show', valorInvalido);
+    if (valorInvalido) ok = false;
+    $('edit-err-data').classList.toggle('show', !dataCompra);
+    if (!dataCompra) ok = false;
+    if (!ok) return;
+
+    const btn = $('editSaveBtn');
+    const txt = $('editSaveText');
+    btn.disabled = true;
+    txt.innerHTML = '<span class="spinner"></span>';
+    try {
+      await updatePeca(id, { nome, valor, forma, parcelas, data_compra: dataCompra });
+      closeEditModal();
+      toast('Peça atualizada');
+    } catch (err) {
+      toast('Erro: ' + err.message, true);
+    } finally {
+      btn.disabled = false;
+      txt.textContent = 'Salvar';
+    }
+  });
+
+  // ============== DELETE ==============
+  async function handleDelete(id) {
+    if (!confirm('Excluir esta peça?')) return;
+    try {
+      await deletePeca(id);
+      toast('Peça removida');
+    } catch (err) {
+      toast('Erro: ' + err.message, true);
+    }
+  }
+
+  // ============== RENDER ==============
+  function render() {
+    const pecas = state.pecas;
+    const totalProjeto = pecas.reduce((s, p) => s + Number(p.valor), 0);
+    const totalAvista = pecas.filter(p => p.forma === 'avista').reduce((s, p) => s + Number(p.valor), 0);
+    const totalParcelado = pecas.filter(p => p.forma === 'parcelado').reduce((s, p) => s + Number(p.valor), 0);
+    const qtdParceladas = pecas.filter(p => p.forma === 'parcelado').length;
+
+    $('totalProjeto').textContent = fmt(totalProjeto);
+    $('totalAvista').textContent = fmt(totalAvista);
+    $('totalParcelado').textContent = fmt(totalParcelado);
+    $('totalPecas').textContent = pecas.length;
+    $('qtdParceladas').textContent = qtdParceladas;
+
+    const tbody = $('tableBody');
+    tbody.innerHTML = '';
+    if (pecas.length === 0) {
+      $('emptyState').style.display = 'block';
+      $('tableWrapper').style.display = 'none';
+    } else {
+      $('emptyState').style.display = 'none';
+      $('tableWrapper').style.display = 'block';
+      pecas.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.className = 'table-row animate-in';
+        const valorParcela = p.forma === 'parcelado' ? (Number(p.valor) / p.parcelas) : Number(p.valor);
+        const parcelaTxt = p.forma === 'parcelado' ? `${p.parcelas}x R$ ${fmt(valorParcela)}` : '—';
+        tr.innerHTML = `
+          <td class="py-4 pr-4">
+            <div class="font-medium">${escapeHtml(p.nome)}</div>
+            <div class="text-xs mt-1 lg:hidden" style="color: var(--text-muted)">${fmtDataBR(p.data_compra)}</div>
+            <div class="sm:hidden mt-1">
+              <span class="badge ${p.forma === 'avista' ? 'badge-cash' : 'badge-installment'}">
+                ${p.forma === 'avista' ? 'À vista' : p.parcelas + 'x'}
+              </span>
+            </div>
+          </td>
+          <td class="py-4 px-3 text-left mono hidden lg:table-cell" style="color: var(--text-secondary)">
+            ${fmtDataBR(p.data_compra)}
+          </td>
+          <td class="py-4 px-3 text-right mono">R$ ${fmt(p.valor)}</td>
+          <td class="py-4 px-3 text-center hidden sm:table-cell">
+            <span class="badge ${p.forma === 'avista' ? 'badge-cash' : 'badge-installment'}">
+              ${p.forma === 'avista' ? 'À vista' : p.parcelas + 'x'}
+            </span>
+          </td>
+          <td class="py-4 px-3 text-right mono hidden md:table-cell" style="color: var(--text-secondary)">
+            ${parcelaTxt}
+          </td>
+          <td class="py-4 pl-3 text-right whitespace-nowrap">
+            <button class="btn-edit" data-edit-id="${p.id}">editar</button>
+            <button class="btn-danger" data-id="${p.id}">excluir</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      tbody.querySelectorAll('.btn-danger').forEach(btn => {
+        btn.addEventListener('click', () => handleDelete(btn.dataset.id));
+      });
+      tbody.querySelectorAll('.btn-edit').forEach(btn => {
+        btn.addEventListener('click', () => openEditModal(btn.dataset.editId));
+      });
+    }
+    $('counterLabel').textContent = pecas.length + (pecas.length === 1 ? ' item' : ' itens');
+
+    renderMonthly(pecas);
+  }
+
+  function renderMonthly(pecas) {
+    const monthsGrid = $('monthsGrid');
+    const monthsEmpty = $('monthsEmpty');
+    monthsGrid.innerHTML = '';
+
+    if (pecas.length === 0) {
+      monthsEmpty.style.display = 'block';
+      monthsGrid.style.display = 'none';
+      $('peakMonth').textContent = '0,00';
+      $('peakMonthLabel').textContent = '';
+      return;
+    }
+
+    // Bucket por mês-calendário: { 'YYYY-MM': { year, month, total, items: [] } }
+    const buckets = {};
+    function ensureBucket(year, month) {
+      const key = monthKey(year, month);
+      if (!buckets[key]) buckets[key] = { key, year, month, total: 0, items: [] };
+      return buckets[key];
+    }
+
+    pecas.forEach(p => {
+      if (!p.data_compra) return; // segurança
+      const valorTotal = Number(p.valor);
+      if (p.forma === 'avista') {
+        const { year, month } = addMonths(p.data_compra, 0);
+        const b = ensureBucket(year, month);
+        b.total += valorTotal;
+        b.items.push({ nome: p.nome, valor: valorTotal, atual: 1, total: 1, forma: 'avista' });
+      } else {
+        const valorPar = valorTotal / p.parcelas;
+        for (let i = 0; i < p.parcelas; i++) {
+          const { year, month } = addMonths(p.data_compra, i);
+          const b = ensureBucket(year, month);
+          b.total += valorPar;
+          b.items.push({ nome: p.nome, valor: valorPar, atual: i + 1, total: p.parcelas, forma: 'parcelado' });
+        }
+      }
+    });
+
+    // Ordenar cronologicamente
+    const ordered = Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
+
+    if (ordered.length === 0) {
+      monthsEmpty.style.display = 'block';
+      monthsGrid.style.display = 'none';
+      $('peakMonth').textContent = '0,00';
+      $('peakMonthLabel').textContent = '';
+      return;
+    }
+
+    monthsEmpty.style.display = 'none';
+    monthsGrid.style.display = 'grid';
+
+    // Pico
+    const peakBucket = ordered.reduce((max, b) => b.total > max.total ? b : max, ordered[0]);
+    $('peakMonth').textContent = fmt(peakBucket.total);
+    $('peakMonthLabel').textContent = '· ' + monthLabel(peakBucket.year, peakBucket.month);
+
+    // Mês "atual" para destaque (mês corrente real)
+    const now = new Date();
+    const currentKey = monthKey(now.getFullYear(), now.getMonth());
+
+    ordered.forEach(b => {
+      const card = document.createElement('div');
+      const isCurrent = b.key === currentKey;
+      const isPeak = b.key === peakBucket.key;
+      card.className = 'month-card animate-in' + (isCurrent ? ' current' : '');
+      const pct = peakBucket.total > 0 ? (b.total / peakBucket.total) * 100 : 0;
+
+      const itemsHtml = b.items.map(i => {
+        const tag = i.forma === 'avista' ? 'à vista' : `${i.atual}/${i.total}`;
+        return `<div class="flex justify-between text-xs py-1" style="color: var(--text-secondary)">
+           <span class="truncate pr-2">${escapeHtml(i.nome)}</span>
+           <span class="mono whitespace-nowrap" style="color: var(--text-muted)">${tag} · R$ ${fmt(i.valor)}</span>
+         </div>`;
+      }).join('');
+
+      const tags = [];
+      if (isCurrent) tags.push('<span class="label-tag" style="color: var(--accent)">// atual</span>');
+      if (isPeak) tags.push('<span class="label-tag" style="color: var(--warn)">// pico</span>');
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-2 gap-2">
+          <div class="label-tag">${monthLabel(b.year, b.month)}</div>
+          <div class="flex gap-2">${tags.join('')}</div>
+        </div>
+        <div class="stat-value text-2xl mb-1">R$ ${fmt(b.total)}</div>
+        <div class="text-xs mb-2" style="color: var(--text-muted)">
+          ${b.items.length} ${b.items.length === 1 ? 'lançamento' : 'lançamentos'}
+        </div>
+        <div class="bar-fill"><div style="width: ${pct}%"></div></div>
+        <div class="mt-3 pt-3" style="border-top: 1px solid var(--border)">${itemsHtml}</div>
+      `;
+      monthsGrid.appendChild(card);
+    });
+  }
+</script>
+</body>
+</html>
